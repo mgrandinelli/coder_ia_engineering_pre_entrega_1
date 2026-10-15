@@ -9,11 +9,14 @@ Un "Unified Async LLM Client": una sola interfaz asíncrona para hablar con Open
 Requiere Python 3.12 o superior.
 
 ```bash
+git clone https://github.com/mgrandinelli/coder_ia_engineering_pre_entrega_1.git
+cd coder_ia_engineering_pre_entrega_1
+
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-cp .env.example .env      # y completá tu clave
+cp .env.example .env      # y completar la clave
 python main.py
 ```
 
@@ -29,12 +32,12 @@ python main.py openai
 | Variable | Obligatoria | Qué es |
 |---|---|---|
 | `LLM_PROVIDER` | No (por defecto `openai`) | Proveedor a usar: `openai` o `anthropic` |
-| `OPENAI_API_KEY` | Si usás OpenAI | Clave de la API de OpenAI |
-| `ANTHROPIC_API_KEY` | Si usás Anthropic | Clave de la API de Anthropic |
+| `OPENAI_API_KEY` | Con OpenAI | Clave de la API de OpenAI |
+| `ANTHROPIC_API_KEY` | Con Anthropic | Clave de la API de Anthropic |
 | `OPENAI_MODEL` | No (por defecto `gpt-4o-mini`) | Modelo de OpenAI |
-| `ANTHROPIC_MODEL` | No (por defecto `claude-opus-5-5`) | Modelo de Anthropic |
+| `ANTHROPIC_MODEL` | No (por defecto `claude-haiku-4-5`) | Modelo de Anthropic |
 
-Solo hace falta la clave del proveedor que vayas a usar. El archivo `.env` está en `.gitignore`; al repo solo se sube `.env.example`.
+Solo hace falta la clave del proveedor elegido. El archivo `.env` está en `.gitignore`; al repo solo se sube `.env.example`.
 
 ## Archivos
 
@@ -44,7 +47,7 @@ Solo hace falta la clave del proveedor que vayas a usar. El archivo `.env` está
 | `clients.py` | `BaseLLMClient` (clase base abstracta), `OpenAIClient` y `AnthropicClient` |
 | `manager.py` | `AsyncLLMManager`: carga el cliente según la configuración |
 | `main.py` | Script de validación: modo normal y streaming |
-| `test_main.py` | 34 tests, sin red ni claves |
+| `test_main.py` | 35 tests, sin red ni claves |
 | `.env.example` | Plantilla de variables de entorno |
 
 ## Cómo se usa desde código
@@ -123,11 +126,11 @@ Proveedor: openai | modelo: gpt-4o-mini
 Pregunta: ¿Qué es la entropía?
 
 === Modo normal ===
-[ERROR auth] Falta OPENAI_API_KEY (revisá tu archivo .env)
+[ERROR auth] Falta la variable de entorno OPENAI_API_KEY
 
 === Modo streaming ===
 
-[ERROR auth] Falta OPENAI_API_KEY (revisá tu archivo .env)
+[ERROR auth] Falta la variable de entorno OPENAI_API_KEY
 
 === Validación con Pydantic ===
 temperature=3.5 rechazada: Input should be less than or equal to 2
@@ -138,18 +141,66 @@ El programa terminó sin interrumpirse.
 ## Tests
 
 ```bash
-pytest
+pytest -v
 ```
 
-Son 34 tests y tardan unos 2 segundos. No usan la red ni claves: reemplazan los SDK por dobles de prueba que se inyectan con el parámetro `sdk_client` de cada cliente. Cubren los cuatro criterios de la rúbrica:
+Son 35 tests y tardan unos 2 segundos. No usan la red ni claves: reemplazan los SDK por dobles de prueba que se inyectan con el parámetro `sdk_client` de cada cliente. Cubren los cuatro criterios de la rúbrica:
 
 - **Proveedores:** el manager carga el cliente correcto, rechaza un proveedor desconocido y ambos clientes devuelven la misma estructura.
 - **Streaming:** los fragmentos llegan de a uno desde un generador asíncrono.
 - **Validación:** valores fuera de rango, roles inválidos y que la clave no aparezca en el `repr`.
 - **Errores:** límite de tasa, red, timeout y autenticación en ambos proveedores, corte de red a mitad del stream y ejecución sin claves.
 
-## Decisiones de diseño
+## Arquitectura y decisiones de diseño
 
-- **`temperature` no se envía a Anthropic.** `ModelConfig` la valida entre 0 y 2 como pide la consigna, pero los modelos Claude actuales rechazan ese parámetro con un error 400, así que `AnthropicClient` lo omite. En OpenAI solo se envía si se define.
+- **Modelo de Anthropic elegido por la `temperature`.** La consigna pide validar `temperature`, y los dos clientes la envían cuando `ModelConfig` la define. Para que funcione en Anthropic, el modelo por defecto es `claude-haiku-4-5`, que acepta ese parámetro. Los modelos Claude más recientes (por ejemplo `claude-opus-5-5`) ya no lo usan y lo rechazan con un error 400, que el cliente devuelve como error controlado `bad_request`. Anthropic acepta valores de 0 a 1: un valor mayor, aunque pase la validación de 0 a 2, también vuelve como `bad_request`.
+- **Sin `temperature`, no se envía.** Si `ModelConfig` no la define, cada proveedor usa su valor por defecto.
 - **`max_tokens` por defecto en 4096.** Es un valor que aceptan los modelos de ambos proveedores. En Claude ese límite incluye el razonamiento interno del modelo, por eso no conviene bajarlo demasiado.
 - **`gather` y `TaskGroup`.** Los clientes son corrutinas comunes, así que se pueden lanzar varias llamadas a la vez con `asyncio.gather` o, para que una falla cancele a las demás, con `asyncio.TaskGroup`.
+
+## Reporte de tests
+
+Salida de `pytest -v`:
+
+```
+============================= test session starts ==============================
+collecting ... collected 35 items
+
+test_main.py::test_manager_carga_el_proveedor_segun_la_configuracion[openai-OpenAIClient] PASSED [  2%]
+test_main.py::test_manager_carga_el_proveedor_segun_la_configuracion[anthropic-AnthropicClient] PASSED [  5%]
+test_main.py::test_manager_rechaza_un_proveedor_desconocido PASSED       [  8%]
+test_main.py::test_base_es_abstracta PASSED                              [ 11%]
+test_main.py::test_generate_devuelve_la_misma_estructura_en_ambos_proveedores[OpenAIClient-OpenAIFalso-openai] PASSED [ 14%]
+test_main.py::test_generate_devuelve_la_misma_estructura_en_ambos_proveedores[AnthropicClient-AnthropicFalso-anthropic] PASSED [ 17%]
+test_main.py::test_anthropic_separa_el_system_y_envia_temperature PASSED [ 20%]
+test_main.py::test_sin_temperature_no_se_envia_el_parametro PASSED       [ 22%]
+test_main.py::test_openai_recibe_los_parametros_validados PASSED         [ 25%]
+test_main.py::test_stream_entrega_los_fragmentos_de_a_uno[OpenAIClient-OpenAIFalso-openai] PASSED [ 28%]
+test_main.py::test_stream_entrega_los_fragmentos_de_a_uno[AnthropicClient-AnthropicFalso-anthropic] PASSED [ 31%]
+test_main.py::test_model_config_rechaza_valores_fuera_de_rango[campos0] PASSED [ 34%]
+test_main.py::test_model_config_rechaza_valores_fuera_de_rango[campos1] PASSED [ 37%]
+test_main.py::test_model_config_rechaza_valores_fuera_de_rango[campos2] PASSED [ 40%]
+test_main.py::test_model_config_rechaza_valores_fuera_de_rango[campos3] PASSED [ 42%]
+test_main.py::test_model_config_rechaza_valores_fuera_de_rango[campos4] PASSED [ 45%]
+test_main.py::test_model_config_acepta_los_limites_de_temperature PASSED [ 48%]
+test_main.py::test_chat_message_rechaza_rol_o_contenido_invalidos[mensaje0] PASSED [ 51%]
+test_main.py::test_chat_message_rechaza_rol_o_contenido_invalidos[mensaje1] PASSED [ 54%]
+test_main.py::test_la_api_key_no_aparece_en_el_repr PASSED               [ 57%]
+test_main.py::test_generate_devuelve_un_error_controlado[RateLimitError-rate_limit-True-OpenAIClient-OpenAIFalso-openai] PASSED [ 60%]
+test_main.py::test_generate_devuelve_un_error_controlado[RateLimitError-rate_limit-True-AnthropicClient-AnthropicFalso-anthropic] PASSED [ 62%]
+test_main.py::test_generate_devuelve_un_error_controlado[APIConnectionError-network-True-OpenAIClient-OpenAIFalso-openai] PASSED [ 65%]
+test_main.py::test_generate_devuelve_un_error_controlado[APIConnectionError-network-True-AnthropicClient-AnthropicFalso-anthropic] PASSED [ 68%]
+test_main.py::test_generate_devuelve_un_error_controlado[APITimeoutError-timeout-True-OpenAIClient-OpenAIFalso-openai] PASSED [ 71%]
+test_main.py::test_generate_devuelve_un_error_controlado[APITimeoutError-timeout-True-AnthropicClient-AnthropicFalso-anthropic] PASSED [ 74%]
+test_main.py::test_generate_devuelve_un_error_controlado[AuthenticationError-auth-False-OpenAIClient-OpenAIFalso-openai] PASSED [ 77%]
+test_main.py::test_generate_devuelve_un_error_controlado[AuthenticationError-auth-False-AnthropicClient-AnthropicFalso-anthropic] PASSED [ 80%]
+test_main.py::test_stream_no_lanza_ante_un_rate_limit[OpenAIClient-OpenAIFalso-openai] PASSED [ 82%]
+test_main.py::test_stream_no_lanza_ante_un_rate_limit[AnthropicClient-AnthropicFalso-anthropic] PASSED [ 85%]
+test_main.py::test_stream_conserva_lo_recibido_si_la_red_se_corta_a_mitad PASSED [ 88%]
+test_main.py::test_anthropic_informa_un_rechazo_como_error_controlado PASSED [ 91%]
+test_main.py::test_sin_api_key_no_hay_crash[openai] PASSED               [ 94%]
+test_main.py::test_sin_api_key_no_hay_crash[anthropic] PASSED            [ 97%]
+test_main.py::test_main_corre_sin_argumentos_y_sin_claves PASSED         [100%]
+
+============================== 35 passed in 2.07s ==============================
+```

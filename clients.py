@@ -114,7 +114,7 @@ class OpenAIClient(BaseLLMClient):
 
     def _crear_sdk(self) -> openai.AsyncOpenAI:
         if self._api_key is None:
-            raise _CredencialFaltante("Falta OPENAI_API_KEY (revisá tu archivo .env)")
+            raise _CredencialFaltante("Falta la variable de entorno OPENAI_API_KEY")
         return openai.AsyncOpenAI(api_key=self._api_key.get_secret_value())
 
     def _params(self, messages: Messages, config: ModelConfig) -> dict[str, Any]:
@@ -169,7 +169,7 @@ class OpenAIClient(BaseLLMClient):
 
 class AnthropicClient(BaseLLMClient):
     provider = "anthropic"
-    default_model = "claude-opus-5-5"
+    default_model = "claude-haiku-4-5"
     api_key_env = "ANTHROPIC_API_KEY"
     _sdk_module = anthropic
 
@@ -190,7 +190,8 @@ class AnthropicClient(BaseLLMClient):
         sistema = "\n\n".join(m.content for m in normalizados if m.role == "system")
         if sistema:
             params["system"] = sistema
-        # `temperature` no se envía: los modelos Claude actuales la rechazan con un 400.
+        if config.temperature is not None:
+            params["temperature"] = config.temperature
         return params
 
     _RECHAZO = LLMErrorInfo(kind="refusal", message="El modelo rechazó la solicitud")

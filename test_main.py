@@ -153,7 +153,7 @@ async def test_generate_devuelve_la_misma_estructura_en_ambos_proveedores(clase,
     assert respuesta.input_tokens and respuesta.output_tokens
 
 
-async def test_anthropic_separa_el_system_y_no_envia_temperature():
+async def test_anthropic_separa_el_system_y_envia_temperature():
     sdk = AnthropicFalso()
 
     await AnthropicClient(sdk_client=sdk).generate(CONVERSACION, ModelConfig(temperature=0.5))
@@ -161,7 +161,18 @@ async def test_anthropic_separa_el_system_y_no_envia_temperature():
     params = sdk.llamadas[0]
     assert params["system"] == "Sé breve."
     assert params["messages"] == [{"role": "user", "content": "¿Qué es la entropía?"}]
-    assert "temperature" not in params
+    assert params["temperature"] == 0.5
+    assert params["model"] == "claude-haiku-4-5"
+
+
+async def test_sin_temperature_no_se_envia_el_parametro():
+    sdk_openai, sdk_anthropic = OpenAIFalso(), AnthropicFalso()
+
+    await OpenAIClient(sdk_client=sdk_openai).generate(CONVERSACION)
+    await AnthropicClient(sdk_client=sdk_anthropic).generate(CONVERSACION)
+
+    assert "temperature" not in sdk_openai.llamadas[0]
+    assert "temperature" not in sdk_anthropic.llamadas[0]
 
 
 async def test_openai_recibe_los_parametros_validados():
